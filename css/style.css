@@ -4097,7 +4097,9 @@ body.blackyellow-theme .footnote-box .footnote-text, body.light-theme .footnote-
 ========================================================= */
 
 .verse-text-with-audio {
-  display: block !important;
+  display: flex !important;
+  align-items: flex-start;
+  gap: 8px;
   width: 100%;
   max-width: 100%;
   white-space: normal !important;
@@ -4105,6 +4107,12 @@ body.blackyellow-theme .footnote-box .footnote-text, body.light-theme .footnote-
   overflow-wrap: break-word;
   word-break: normal;
   line-height: 1.65;
+}
+
+.verse-english-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: block;
 }
 
 .verse-text-content {
@@ -4158,6 +4166,116 @@ body.blackyellow-theme .footnote-box .footnote-text, body.light-theme .footnote-
 /* =========================================================
 İNGİLİZCE SES BUTONU BİTİŞ
 ========================================================= */
+
+/* =========================================================
+   1989 BASKISI AÇILIR KARŞILAŞTIRMA
+   - Ana 1992 satırına yeni görünür satır eklemez.
+   - Bağlantı sağda kalır; içerik yalnızca tıklanınca açılır.
+========================================================= */
+.verse-1989-link {
+  flex: 0 0 auto;
+  align-self: center;
+  margin-left: auto;
+  padding: 2px 3px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--link-color, #8dc6ff);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 750;
+  line-height: 1.2;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+  cursor: pointer;
+  opacity: 0.9;
+}
+
+.verse-1989-link:hover,
+.verse-1989-link:focus-visible,
+.verse-1989-link.is-open {
+  color: var(--verse-number-text);
+  background: var(--verse-number-bg);
+  opacity: 1;
+  outline: none;
+}
+
+.verse-1989-link:focus-visible {
+  box-shadow: 0 0 0 2px var(--verse-border);
+}
+
+.verse-1989-panel[hidden] {
+  display: none !important;
+}
+
+.verse-1989-panel {
+  margin: 4px 0;
+  padding: 9px 11px;
+  border: 1px solid var(--border-color);
+  border-left: 4px solid var(--verse-border);
+  border-radius: var(--radius);
+  background: var(--english-bg);
+  color: var(--english-text);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.verse-1989-heading {
+  margin-bottom: 5px;
+  color: var(--light-text);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.verse-1989-text {
+  line-height: 1.7;
+}
+
+.verse-1989-footnotes {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px dashed var(--border-color);
+}
+
+.verse-1989-footnotes-title {
+  margin-bottom: 4px;
+  color: var(--light-text);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.verse-1989-footnote {
+  margin-top: 5px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--note-bg);
+  color: var(--note-text);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.verse-1989-loading,
+.verse-1989-error {
+  color: var(--light-text);
+  font-size: 0.88rem;
+  font-weight: 650;
+}
+
+.verse-1989-error {
+  color: var(--error-color);
+}
+
+@media (max-width: 640px) {
+  .verse-text-with-audio {
+    gap: 6px;
+  }
+
+  .verse-1989-link {
+    font-size: 0.72rem;
+  }
+}
+
 
 /* =========================================================
    YENİ ÜST MENÜ DÜZENİ

@@ -75,6 +75,7 @@ const CONFIG = {
 
   dataPaths: {
     en: './data/qurantft.json',
+    quran1989: './data/quran1989.json',
     tr: './data/quran_tr.json',
     translit: './data/Turkce_Transkript.json',
     ai: './data/yapayzekaceviri.json',
@@ -98,6 +99,7 @@ const STATE = {
   totalPages: LAST_QURAN_DATA_PAGE,
   data: {
     en: {},
+    quran1989: null,
     tr: {},
     translit: {},
     ai: {},
@@ -200,6 +202,7 @@ const MEALS_STATE = {
 
 const FEATURE_STATE = {
   ai: { status: 'idle', promise: null },
+  quran1989: { status: 'idle', promise: null },
   dictionary: { status: 'idle', promise: null },
   arabicComparisons: { status: 'idle', promise: null },
   analysis: { status: 'idle', promise: null }
@@ -1148,6 +1151,9 @@ function handleDelegatedAction(event) {
     case 'speak-english':
       speakEnglishVerse(sura, verse);
       break;
+    case 'toggle-1989':
+      toggle1989Edition(target, sura, verse);
+      break;
     case 'toggle-footnote':
       toggleNote(target.dataset.target);
       break;
@@ -1345,6 +1351,45 @@ async function loadDataFile(path, key) {
   return json;
 }
 
+function normalizeQuran1989Data(data) {
+  if (data?.verses && typeof data.verses === 'object' && !Array.isArray(data.verses)) {
+    return data;
+  }
+
+  if (!Array.isArray(data)) {
+    return { verses: {} };
+  }
+
+  const verses = Object.create(null);
+
+  data.forEach((item) => {
+    if (!item || typeof item !== 'object') return;
+
+    const verseId = String(item['Ayet no'] || '').trim();
+    const verseText = String(item.Ayet || '').trim();
+
+    if (!/^\d{1,3}:\d{1,3}$/.test(verseId) || !verseText) return;
+
+    verses[verseId] = {
+      text: verseText,
+      footnotes: Array.isArray(item.Dipnot)
+        ? item.Dipnot.filter(Boolean).map((note) => String(note))
+        : [],
+      passageTitle: item['Pasaj Başlığı'] ?? null,
+      suraTitle: String(item['Ayet adı'] || '')
+    };
+  });
+
+  return {
+    _meta: {
+      edition: '1989 Authorized English Version',
+      sourceFormat: 'V2_FULL',
+      verseCount: Object.keys(verses).length
+    },
+    verses
+  };
+}
+
 async function ensureFeatureLoaded(featureName) {
   const feature = FEATURE_STATE[featureName];
 
@@ -1361,6 +1406,12 @@ async function ensureFeatureLoaded(featureName) {
     try {
       if (featureName === 'ai') {
         await loadDataFile(CONFIG.dataPaths.ai, 'ai');
+      } else if (featureName === 'quran1989') {
+        await loadDataFile(CONFIG.dataPaths.quran1989, 'quran1989');
+        STATE.data.quran1989 = normalizeQuran1989Data(STATE.data.quran1989);
+        console.log(
+          `1989 baskisi hazir (${Object.keys(STATE.data.quran1989.verses || {}).length} ayet).`
+        );
       } else if (featureName === 'dictionary') {
         const results = await Promise.allSettled([
           loadDataFile(
@@ -3776,20 +3827,41 @@ function buildPageHtml(pageNum) {
 
       html += `
         <div class="verse-text verse-text-with-audio">
-          <span class="verse-text-content">${escapeHtml(enSura.verses[verseNum])}</span>
+          <span class="verse-english-main">
+            <span class="verse-text-content">${escapeHtml(enSura.verses[verseNum])}</span>
+
+            <button
+              type="button"
+              class="inline-speak-btn audio-control-btn audio-play-btn"
+              data-action="speak-english"
+              data-sura="${escapeHtml(suraNum)}"
+              data-verse="${escapeHtml(verseNum)}"
+              title="İngilizce oku"
+              aria-label="${escapeHtml(verseKey)} İngilizce metnini oku"
+            >
+              <span class="audio-play-icon" aria-hidden="true"></span>
+            </button>
+          </span>
 
           <button
             type="button"
-            class="inline-speak-btn audio-control-btn audio-play-btn"
-            data-action="speak-english"
+            class="verse-1989-link"
+            data-action="toggle-1989"
+            data-target="quran1989-${suraNum}-${verseNum}"
             data-sura="${escapeHtml(suraNum)}"
             data-verse="${escapeHtml(verseNum)}"
-            title="İngilizce oku"
-            aria-label="${escapeHtml(verseKey)} İngilizce metnini oku"
-          >
-            <span class="audio-play-icon" aria-hidden="true"></span>
-          </button>
+            aria-controls="quran1989-${suraNum}-${verseNum}"
+            aria-expanded="false"
+            title="1989 Authorized English Version metnini göster"
+          >1989 Baskısı</button>
         </div>
+
+        <div
+          id="quran1989-${suraNum}-${verseNum}"
+          class="verse-1989-panel"
+          hidden
+          aria-live="polite"
+        ></div>
 
         <div class="verse-text-tr">
           <strong>${escapeHtml(trSura.verses?.[verseNum] || '')}</strong>
@@ -4238,9 +4310,11 @@ function decorateVerseWords() {
     - İngilizce dipnot metinleri
   */
   const englishTextSelectors = [
-    '.verse-text',
+    '.verse-text-content',
     '.passage-title',
-    '.footnote-en .footnote-text'
+    '.footnote-en .footnote-text',
+    '.verse-1989-text',
+    '.verse-1989-footnote'
   ];
 
   document
@@ -6516,6 +6590,98 @@ async function ensureMealOpen(suraNum, verseNum, query = '', focusedMealName = '
 /* =========================
    Note toggle
 ========================= */
+async function toggle1989Edition(button, sura, verse) {
+  if (!(button instanceof HTMLElement)) return;
+
+  const targetId = String(button.dataset.target || '').trim();
+  const panel = targetId ? document.getElementById(targetId) : null;
+
+  if (!panel) {
+    showNotification('1989 baskısı alanı bulunamadı.', 'warning');
+    return;
+  }
+
+  const willOpen = panel.hidden;
+
+  if (!willOpen) {
+    panel.hidden = true;
+    button.setAttribute('aria-expanded', 'false');
+    button.classList.remove('is-open');
+    return;
+  }
+
+  panel.hidden = false;
+  button.setAttribute('aria-expanded', 'true');
+  button.classList.add('is-open');
+
+  if (panel.dataset.loaded === 'true') {
+    return;
+  }
+
+  panel.innerHTML = `
+    <div class="verse-1989-loading">
+      1989 baskısı yükleniyor...
+    </div>
+  `;
+
+  try {
+    await ensureFeatureLoaded('quran1989');
+
+    const verseId = `${sura}:${verse}`;
+    const record = STATE.data.quran1989?.verses?.[verseId];
+
+    if (!record?.text) {
+      panel.innerHTML = `
+        <div class="verse-1989-error">
+          Bu ayet için 1989 baskısı metni bulunamadı.
+        </div>
+      `;
+      return;
+    }
+
+    const footnotes = Array.isArray(record.footnotes)
+      ? record.footnotes.filter(Boolean)
+      : [];
+
+    panel.innerHTML = `
+      <div class="verse-1989-heading">
+        1989 Authorized English Version
+      </div>
+
+      <div class="verse-1989-text">
+        ${escapeHtml(record.text)}
+      </div>
+
+      ${footnotes.length
+        ? `
+          <div class="verse-1989-footnotes">
+            <div class="verse-1989-footnotes-title">Dipnot</div>
+            ${footnotes
+              .map((note) => `
+                <div class="verse-1989-footnote">
+                  ${escapeHtml(note)}
+                </div>
+              `)
+              .join('')}
+          </div>
+        `
+        : ''}
+    `;
+
+    panel.dataset.loaded = 'true';
+
+    // 1989 ayet ve dipnot kelimelerine de mevcut Türkçe kelime tooltip'ini uygula.
+    decorateVerseWords();
+  } catch (error) {
+    console.error('1989 baskısı yüklenemedi:', error);
+    panel.innerHTML = `
+      <div class="verse-1989-error">
+        1989 baskısı verisi yüklenemedi.
+      </div>
+    `;
+  }
+}
+
 function toggleNote(id) {
   const element = document.getElementById(id);
 

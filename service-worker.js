@@ -19,15 +19,14 @@ const APP_SHELL = [
   './css/style.css?v=63',
   './css/evidence.css?v=62',
 
-  './js/script.js?v=64',
-  './js/evidence.js?v=64',
-  './js/guide.js?v=64',
+  './js/script.js?v=61',
+  './js/evidence.js?v=55',
+  './js/guide.js?v=63',
 
   './js/modules/core-utils.js',
   './js/modules/navigation-utils.js',
   './js/modules/meal-normalizer.js',
   './js/modules/note-validator.js',
-  './js/modules/platform-utils.js',
 
   './assets/images/logo-main.png',
   './assets/images/logo-icon.png'
@@ -66,16 +65,11 @@ self.addEventListener('activate', (event) => {
             )
         )
       )
-      .then(() =>
-        self.clients.claim()
-      )
+      .then(() => self.clients.claim())
   );
 });
 
-async function cacheFirst(
-  request,
-  cacheName
-) {
+async function cacheFirst(request, cacheName) {
   const cache =
     await caches.open(cacheName);
 
@@ -99,15 +93,18 @@ async function cacheFirst(
   return networkResponse;
 }
 
-async function networkFirst(request) {
+async function networkFirst(
+  request,
+  cacheName,
+  fallbackUrl = null,
+  fetchOptions = {}
+) {
   const cache =
-    await caches.open(STATIC_CACHE);
+    await caches.open(cacheName);
 
   try {
     const networkResponse =
-      await fetch(request, {
-        cache: 'no-cache'
-      });
+      await fetch(request, fetchOptions);
 
     if (networkResponse.ok) {
       await cache.put(
@@ -125,8 +122,35 @@ async function networkFirst(request) {
       return cachedResponse;
     }
 
-    return cache.match('./index.html');
+    if (fallbackUrl) {
+      const fallbackResponse =
+        await cache.match(fallbackUrl);
+
+      if (fallbackResponse) {
+        return fallbackResponse;
+      }
+    }
+
+    return Response.error();
   }
+}
+
+async function freshDataFirst(request) {
+  /*
+   * JSON/veri dosyalari icin cache-first kullanmiyoruz.
+   * Boylece quran_tr.json her istekte once Cloudflare'daki
+   * guncel deployment'tan alinmaya calisilir.
+   *
+   * cache: 'no-store' tarayicinin HTTP cache'inden eski bir
+   * cevap donmesini engeller. Basarili cevap DATA_CACHE'e yazilir;
+   * internet yoksa son basarili kopya offline yedek olarak kullanilir.
+   */
+  return networkFirst(
+    request,
+    DATA_CACHE,
+    null,
+    { cache: 'no-store' }
+  );
 }
 
 self.addEventListener('fetch', (event) => {
@@ -145,21 +169,30 @@ self.addEventListener('fetch', (event) => {
 
   if (request.mode === 'navigate') {
     event.respondWith(
-      networkFirst(request)
+      networkFirst(
+        request,
+        STATIC_CACHE,
+        './index.html',
+        { cache: 'no-cache' }
+      )
     );
 
     return;
   }
 
+  /*
+   * Kritik duzeltme:
+   * quran_tr.json dahil tum yerel JSON/data dosyalari artik
+   * CACHE-FIRST degil NETWORK-FIRST calisir.
+   * Bu sayede GitHub -> Cloudflare deploy hook sonrasi yeni veri,
+   * eski Service Worker Cache API kopyasi tarafindan maskelenmez.
+   */
   if (
     url.pathname.includes('/data/') ||
     url.pathname.endsWith('.json')
   ) {
     event.respondWith(
-      cacheFirst(
-        request,
-        DATA_CACHE
-      )
+      freshDataFirst(request)
     );
 
     return;
@@ -170,7 +203,12 @@ self.addEventListener('fetch', (event) => {
     url.pathname.endsWith('.js')
   ) {
     event.respondWith(
-      networkFirst(request)
+      networkFirst(
+        request,
+        STATIC_CACHE,
+        null,
+        { cache: 'no-cache' }
+      )
     );
 
     return;
